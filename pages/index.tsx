@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import Image from 'next/image';
 import Terminal, {TermElement} from '@/components/terminal';
-import styles from '../styles/home.module.css';
+import styles from '../styles/Home.module.css';
 import useTermSize from '../src/useTermSize';
 import { Ubuntu_Mono } from '@next/font/google';
 

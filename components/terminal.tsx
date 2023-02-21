@@ -39,7 +39,7 @@ export default function Terminal({ width, height, children, ...rest }: any) {
     }
   }, [width, height, children]);
 
-  return <canvas ref={canvasRef} {...rest}>Your browser doesn't support WebGL2</canvas>;
+  return <canvas ref={canvasRef} {...rest}>Your browser doesn&apos;t support WebGL2</canvas>;
 }
 
 export function TermElement(_props: any) {

@@ -31,7 +31,7 @@ export default function useTermSize(fixedWidth: number): { width: number, height
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [termSize]);
+  }, [termSize, fixedWidth]);
 
   return termSize ?? {width: 80, height: 24};
 }

@@ -43,7 +43,7 @@ function createElement(elemObj: any, time: number, lineBuffer: string[], bufWidt
     let y = Number(elemObj["y"]) ?? 0;
     let w = Number(elemObj["w"]) ?? 5;
     let h = Number(elemObj["h"]) ?? 5;
-    elem = new TermBox(time, lineBuffer, bufWidth, bufHeight, charsScrolled, x, y, w, h);
+    elem = new TermBox(time, lineBuffer, bufWidth, bufHeight, charsScrolled, x, y, w, h, elemObj["clear"]);
   }
   if (elemObj["type"] === "matrix") {
     let amount = Number(elemObj["amount"]) ?? 50;
@@ -140,7 +140,7 @@ class TermString extends TermElement {
         }
       });
     } else {
-      this.lines = [str];
+      this.lines = str.split('\n');
       this.doAlign(secs);
     }
   }
@@ -167,6 +167,9 @@ class TermString extends TermElement {
     }
     if (!this.canRender) {
       this.x = this.startX;
+      if (this.slide === null) {
+        this.x = this.endX;
+      }
       this.creationTime = secs;
     }
   }
@@ -214,13 +217,20 @@ class TermBox extends TermElement {
   y: number;
   w: number;
   h: number;
+  clear: boolean;
   
-  constructor(time: number, lineBuffer: string[], bufWidth: number, bufHeight: number, charsScrolled: number, x: number, y: number, w: number, h: number) {
+  constructor(time: number, lineBuffer: string[], bufWidth: number, bufHeight: number, charsScrolled: number,
+    x: number, y: number, w: number, h: number, clear: string | undefined) {
     super(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
     this.x = x;
     this.y = y;
     this.w = w - 1;
     this.h = h - 1;
+    if (clear) {
+      this.clear = Boolean(clear);
+    } else {
+      this.clear = false;
+    }
     this.render(time, 0.0, charsScrolled);
   }
 
@@ -228,6 +238,18 @@ class TermBox extends TermElement {
     let sy = this.y;
     if (this.scroll) {
       sy -= charsScrolled;
+    }
+
+    if (this.clear) {
+      let str = "";
+      for (let x = 0; x < this.w; x++) {
+        str += ' ';
+      }
+      for (let y = sy; y < sy + this.h; y++) {
+        if (y >= 0 && y < this.bufHeight) {
+          this.lineBuffer[y] = replaceAt(this.lineBuffer[y], this.x, str);
+        }
+      }
     }
 
     if (sy >= 0 && sy < this.bufHeight) {

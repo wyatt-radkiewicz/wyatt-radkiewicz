@@ -10,37 +10,22 @@
 }
 
 .scrollSpace {
+  padding: 0;
+  margin: 0;
+  width: 100vw;
   height: 200vh;
   cursor: none;
-}
-
-.sections {
-  margin-top: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4rem;
-  padding: 8rem;
+  padding-top: calc(100vh + var(--char-height) * 8);
 }
 
-.sectionButton {
-  width: 50vw;
-  height: 4rem;
-  border: none;
-  color: black;
-  font-size: 1rem;
-  font-family: inherit;
-  font-weight: bold;
-  background-color: rgba(154, 255, 102, 0.4);
+.profile {
+  border-radius: 50%;
+  opacity: 0.8;
   backdrop-filter: blur(5px);
-  transition: transform 0.3s ease-out;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-shadow: black 0 0 10px;
-}
-
-.sectionButton:hover {
-  transform: scale(1.1);
+  transform: translate(35vw);
+  width: calc(100vw / 80 * 10);
+  height: calc(100vw / 80 * 10);
 }

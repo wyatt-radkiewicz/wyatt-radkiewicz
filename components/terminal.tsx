@@ -37,7 +37,7 @@ export default function Terminal({ width, height, children, ...rest }: any) {
         terminalRef.current = null;
       }
     }
-  }, [width, height, children]);
+  }, [width, height]);
 
   return <canvas ref={canvasRef} {...rest}>Your browser doesn&apos;t support WebGL2</canvas>;
 }

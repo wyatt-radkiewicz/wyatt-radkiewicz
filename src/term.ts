@@ -182,9 +182,11 @@ class TermString extends TermElement {
 
     if (y + this.lines.length + 3 >= this.bufHeight && this.slide !== null) {
       // We're off screen so reset the animation
-      this.canRender = false;
+      if (y >= this.bufHeight) {
+        this.canRender = false;
+      }
       this.doAlign(secs);
-    } else {
+    } else if (y + this.lines.length < this.bufHeight) {
       this.canRender = true;
     }
 

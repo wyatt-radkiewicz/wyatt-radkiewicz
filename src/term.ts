@@ -151,7 +151,7 @@ class TermString extends TermElement {
     }
     if (this.align == "c") {
       let x = Math.floor(this.lines[0].length / 2);
-      this.startX = -x;
+      this.startX = -x*2;
       this.endX = this.originalX - x;
       if (this.slide !== null) {
         this.x = this.endX;
@@ -180,7 +180,7 @@ class TermString extends TermElement {
       y -= charsScrolled;
     }
 
-    if (y >= this.bufHeight) {
+    if (y + this.lines.length + 3 >= this.bufHeight && this.slide !== null) {
       // We're off screen so reset the animation
       this.canRender = false;
       this.doAlign(secs);
@@ -354,6 +354,9 @@ export default class Term {
   private glTextShader: WebGLProgram;
   private glCrtShader: WebGLProgram;
 
+  private testImage: HTMLImageElement | null;
+  private testImageDoneDownloading: boolean;
+
   constructor(fontFamily: string, canvas: HTMLCanvasElement, widthChars: number, heightChars: number, termElements: object[]) {
     // Create the DOM elements and get the contexts
     console.log("Term Creation");
@@ -379,6 +382,16 @@ export default class Term {
     this.textCanvas.style.opacity = "0";
     this.glCanvas = canvas;
     this.glCanvas.appendChild(this.textCanvas);
+
+    this.testImageDoneDownloading = false;
+    // this.testImage = new Image();
+    this.testImage = null;
+    // if (this.testImage !== null) {
+    //   this.testImage.src = "/images/sonic_the_hedgehog_3_profilelarge.jpg";
+    //   this.testImage.addEventListener("load", (e) => {
+    //     this.testImageDoneDownloading = true;
+    //   });
+    // }
 
     // Create the elements in the terminal, and draw and remove the static ones
     this.elements = termElements.map((elem) => createElement(elem, this.timePassed, this.lines, this.widthChars, this.heightChars, this.charsScrolled));
@@ -419,7 +432,7 @@ export default class Term {
         uniform sampler2D tex;
         uniform vec2 texsize;
         uniform float timesecs;
-        #define HORIZ_BLUR_PIXELS 2.0
+        #define HORIZ_BLUR_PIXELS 1.0
         
         vec4 getBlur(vec2 uv) {
           vec4 color = vec4(0.0);
@@ -446,15 +459,15 @@ export default class Term {
         }
 
         vec4 scanline(vec2 uv) {
-          float maxDepth = 0.4;
+          float maxDepth = 0.3;
           float depth = sin(uv.y / texsize.y * 3.0) / 2.0 + 0.5;
           return vec4(depth*depth * -maxDepth);
         }
 
         float rollingShutter(float y) {
-          float depth = 0.6;
-          float height = 0.25;
-          float modtime = mod(timesecs * 0.09, 1.0 + 0.07 + height + 0.3) - height - 0.3;
+          float depth = 0.85;
+          float height = 0.1;
+          float modtime = mod(timesecs * 0.1, 1.0 + 0.07 + height + 0.3 + 1.1) - height - 0.3;
           if (y < modtime) {
             return (1.0 - smoothstep(modtime - 0.07, modtime, y) + depth);
           } else {
@@ -469,11 +482,11 @@ export default class Term {
         }
 
         vec2 scanlineJitterOffset(vec2 uv) {
-          return vec2(sin((uv.y / texsize.y * 3.0) + (timesecs * 1694.0)) * min(texsize.x * 0.5, 0.003125), 0.0);
+          return vec2(sin((uv.y / texsize.y * 3.0) + (timesecs * 1694.0)) * min(texsize.x * 0.8, 0.009125), 0.0);
         }
 
         vec4 glare(vec2 uv) {
-          float power = 0.45;
+          float power = 0.25;
           float xGlare = (-pow(1.5 * uv.x - 0.75, 8.0) + 0.05) / 0.05;
           vec4 final = vec4(0.0);
           if (uv.y < 0.8) {
@@ -484,14 +497,20 @@ export default class Term {
           return final + scanline(uv);
         }
 
+        vec4 shadowMask(vec2 uv) {
+          return vec4(
+            cos(uv.x/texsize.x*2.0-1.0)*0.25+0.75,
+            cos(uv.x/texsize.x*2.0-3.0)*0.25+0.75,
+            cos(uv.x/texsize.x*2.0-5.0)*0.25+0.75,
+            1.0);
+        }
+
         void main() {
           vec2 uv = warpUv(v_uv + scanlineJitterOffset(v_uv));
-          vec2 uvLeft = warpUv(v_uv - vec2(texsize.x * 0.9, 0.0));
-          vec2 uvRight = warpUv(v_uv + vec2(texsize.x * 0.9, 0.0));
-          vec4 baseColor = vec4(texture2D(tex, uvLeft).r, texture2D(tex, uv).g, texture2D(tex, uvRight).b, texture2D(tex, uv).a);
-          vec4 color = baseColor * 0.8 + getBlur(uv) + scanline(uv);
-          color *= rollingShutter(1.0 - uv.y);
-          color += glare(uv);
+          vec4 color = getBlur(uv) * 2.0 + scanline(uv);
+          color *= shadowMask(uv);
+          //color += glare(uv);
+          //color *= rollingShutter(1.0 - uv.y);
           color = vignette(color, uv);
           gl_FragColor = color;
         }`);
@@ -558,8 +577,8 @@ export default class Term {
   private resize() {
     if (this.glCanvas.clientWidth != this.glCanvas.width ||
         this.glCanvas.clientHeight != this.glCanvas.height) {
-      this.glCanvas.width = this.glCanvas.clientWidth * 2;
-      this.glCanvas.height = this.glCanvas.clientHeight * 2;
+      this.glCanvas.width = this.glCanvas.clientWidth;
+      this.glCanvas.height = this.glCanvas.clientHeight;
       this.resizeTextCanvas();
     }
   }
@@ -582,9 +601,13 @@ export default class Term {
     for (let y = 0; y < this.lines.length; y++) {
       for (let c = 0; c < this.lines[y].length; c++) {
         seed = mulberry32butchered(seed);
-        this.textContext.fillStyle = ["#1f1", "#090", "#0f0", "#0a0"][seed % 4];
+        this.textContext.fillStyle = ["#1f1", "#0f0", "#3f3", "#2f2"][seed % 4];
         this.textContext.fillText(this.lines[y].charAt(c), c * 8, y * 12);
       }
+    }
+
+    if (this.testImageDoneDownloading && this.testImage) {
+      this.textContext.drawImage(this.testImage, 0, 0, this.testImage.width, this.testImage.height, 0.0, 0.0, this.textCanvas.width, this.textCanvas.height);
     }
   }
 

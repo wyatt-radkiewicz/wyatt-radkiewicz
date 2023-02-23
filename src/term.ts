@@ -1,20 +1,8 @@
 import figlet, { Fonts } from 'figlet';
+import { onMobile } from 'src/useTermSize';
 
-function replaceAt(base: string, index: number, replaceWith: string): string {
-  if (!base || typeof(base) == "undefined") {
-    return "";
-  }
-  if (!replaceWith || typeof(replaceWith) == "undefined") {
-    return base;
-  }
-  if (index > base.length) {
-    return base;
-  }
-  if (index < 0) {
-    return replaceWith.substring(-index) + base.substring(replaceWith.length + index);
-  }
-  return base.substring(0, index) + replaceWith + base.substring(index + replaceWith.length);
-}
+const CHAR_WIDTH = 8;
+const CHAR_HEIGHT = 8;
 
 function smoothstep(min: number, max: number, x: number): number {
   if (x <= min) {
@@ -27,7 +15,7 @@ function smoothstep(min: number, max: number, x: number): number {
   }
 }
 
-function createElement(elemObj: any, time: number, lineBuffer: string[], bufWidth: number, bufHeight: number, charsScrolled: number): TermElement {
+function createElement(elemObj: any, time: number, lineBuffer: number[], bufWidth: number, bufHeight: number, charsScrolled: number): TermElement {
   let elem = new TermElement(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
 
   if (elemObj["type"] === "string") {
@@ -50,6 +38,9 @@ function createElement(elemObj: any, time: number, lineBuffer: string[], bufWidt
     let speed = Number(elemObj["speed"]) ?? 5;
     elem = new TermMatrix(time, lineBuffer, bufWidth, bufHeight, charsScrolled, amount, speed);
   }
+  if (elemObj["type"] === "cube") {
+    elem = new TermCube(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
+  }
 
   if (elemObj["scroll"] == "true") {
     elem.scroll = true;
@@ -58,11 +49,11 @@ function createElement(elemObj: any, time: number, lineBuffer: string[], bufWidt
 }
 
 class TermElement {
-  lineBuffer: string[];
+  lineBuffer: number[];
   bufWidth: number;
   bufHeight: number;
   scroll: boolean;
-  constructor(time: number, lineBuffer: string[], bufWidth: number, bufHeight: number, charsScrolled: number) {
+  constructor(time: number, lineBuffer: number[], bufWidth: number, bufHeight: number, charsScrolled: number) {
     this.lineBuffer = lineBuffer;
     this.bufWidth = bufWidth;
     this.bufHeight = bufHeight;
@@ -71,8 +62,85 @@ class TermElement {
   render(secs: number, dt: number, charsScrolled: number) {}
 }
 
+function rotatePoint(x: number, y: number, z: number, rx: number, ry: number): [number, number, number] {
+  return [
+    x * Math.cos(ry) - Math.sin(ry) * (z * Math.cos(rx) - y * Math.sin(rx)),
+    y * Math.cos(rx) + z * Math.sin(rx),
+    x * Math.sin(ry) + Math.cos(ry) * (z * Math.cos(rx) - y * Math.sin(rx)),
+  ];
+}
+
+function getShadeChar(nx: number, ny: number, nz: number): number {
+  let sun = [0.577, -0.577, -0.577];
+  let shade = Math.floor(((nx*sun[0] + ny*sun[1] + nz*sun[2]) / 2.0 + 0.5) * 7.999);
+  return ['.', ':', '-', '=', '+', '*', '#', '@'][shade].charCodeAt(0);
+}
+
+class TermCube extends TermElement {
+  zBuffer: number[];
+  ang: [number, number];
+  nearPlane: number;
+  cubeDist: number;
+  cubeSize: number;
+  
+  constructor(time: number, lineBuffer: number[], bufWidth: number, bufHeight: number, charsScrolled: number) {
+    super(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
+    this.ang = [0.0, 0.0];
+    this.nearPlane = 15.0;
+    this.cubeDist = 20;
+    this.cubeSize = 5;
+    this.zBuffer = [...Array(this.bufWidth * this.bufHeight)].map(() => 0);
+  }
+
+  render(secs: number, dt: number, charsScrolled: number) {
+    this.ang[0] += dt * 1.1;
+    this.ang[1] -= dt * 1.1;
+    this.cubeDist = Math.sin(secs) * 5.0 + 16.0;
+    this.zBuffer.fill(1000000000.0, 0);
+    this.drawFace(0);
+    this.drawFace(1);
+    this.drawFace(2);
+    this.drawFace(3);
+    this.drawFace(4);
+    this.drawFace(5);
+  }
+
+  private drawFace(faceId: number) {
+    let points = [
+      [0, 0, -1],
+      [0, 0, 1],
+      [0, -1, 0],
+      [0, 1, 0],
+      [-1, 0, 0],
+      [1, 0, 0],
+    ];
+    let np = rotatePoint(points[faceId][0], points[faceId][1], points[faceId][2], this.ang[0], this.ang[1]);
+    for (let ix = -this.cubeSize + 0.1; ix <= this.cubeSize - 0.1; ix += 0.3) {
+      for (let iy = -this.cubeSize + 0.1; iy <= this.cubeSize - 0.1; iy += 0.3) {
+        let rps = [
+          [ix, iy, -this.cubeSize],
+          [ix, iy, this.cubeSize],
+          [ix, -this.cubeSize, iy],
+          [ix, this.cubeSize, iy],
+          [-this.cubeSize, ix, iy],
+          [this.cubeSize, ix, iy],
+        ];
+        let rp = rotatePoint(rps[faceId][0], rps[faceId][1], rps[faceId][2], this.ang[0], this.ang[1]);
+        let z = rp[2] + this.cubeDist;
+        let x = Math.floor((this.bufWidth / 2) + (rp[0] * this.nearPlane) / z);
+        let y = Math.floor((this.bufHeight / 2) + (rp[1] * this.nearPlane) / z);
+        if (x >= 0 && x < this.bufWidth && y >= 0 && this.bufHeight && z > 0.0 && z < this.zBuffer[y * this.bufWidth + x]) {
+          this.lineBuffer[y * this.bufWidth + x] = getShadeChar(np[0], np[1], np[2]);
+          this.zBuffer[y * this.bufWidth + x] = z;
+        }
+      }
+    }
+  }
+}
+
 class TermString extends TermElement {
-  lines: string[];
+  lines: number[];
+  linesWidth: number;
   x: number;
   y: number;
   align: string;
@@ -89,7 +157,7 @@ class TermString extends TermElement {
   canRender: boolean;
   creationTime: number;
   
-  constructor(time: number, lineBuffer: string[], bufWidth: number, bufHeight: number, charsScrolled: number,
+  constructor(time: number, lineBuffer: number[], bufWidth: number, bufHeight: number, charsScrolled: number,
       str: string, font: string | null, x: number, y: number, align: string,
       cursor: string | undefined, slide: string | undefined) {
     super(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
@@ -98,19 +166,19 @@ class TermString extends TermElement {
     this.y = y;
     this.creationTime = time;
     this.lines = [];
+    this.linesWidth = 0;
     this.align = align;
     this.font = font;
     this.str = str;
-    this.canRender = true;
+    this.canRender = false;
     this.lastCursorUpdate = time;
     if (cursor) {
       this.cursor = cursor === "true";
     } else {
       this.cursor = false;
     }
-    if (slide) {
+    if (slide !== undefined) {
       [this.slide, this.slideTime] = slide.split(' ').map((s) => Number(s));
-      this.canRender = false;
     } else {
       this.slide = null;
       this.slideTime = 0.0;
@@ -135,35 +203,31 @@ class TermString extends TermElement {
     if (this.font) {
       figlet(str, this.font as unknown as Fonts, (err, result) => {
         if (result) {
-          this.lines = result.split('\n');
+          let lines = result.split('\n');
+          this.lines = lines.map((line) => line.split('').map((c) => c.charCodeAt(0))).flat();
+          this.linesWidth = lines[0].length;
           this.doAlign(secs);
         }
       });
     } else {
-      this.lines = str.split('\n');
+      let lines = str.split('\n');
+      this.linesWidth = Math.max(...(lines.map((str) => str.length)));
+      lines = lines.map((line) => line.padEnd(this.linesWidth, ' '));
+      this.lines = lines.map((line) => line.split('').map((c) => c.charCodeAt(0))).flat();
       this.doAlign(secs);
     }
   }
 
   private doAlign(secs: number) {
-    if (this.lines.length == 0) {
-      return;
-    }
     if (this.align == "c") {
-      let x = Math.floor(this.lines[0].length / 2);
+      let x = Math.floor(this.linesWidth / 2);
       this.startX = -x*2;
       this.endX = this.originalX - x;
-      if (this.slide !== null) {
-        this.x = this.endX;
-      }
     } else if (this.align == "r") {
-      this.endX = this.originalX - this.lines[0].length;
-      if (this.slide !== null) {
-        this.x = this.endX;
-      }
+      this.endX = this.originalX - this.linesWidth;
     } else if (this.align == "l") {
       this.endX = this.originalX;
-      this.startX = -this.lines[0].length;
+      this.startX = -this.linesWidth;
     }
     if (!this.canRender) {
       this.x = this.startX;
@@ -180,13 +244,14 @@ class TermString extends TermElement {
       y -= charsScrolled;
     }
 
-    if (y + this.lines.length + 3 >= this.bufHeight && this.slide !== null) {
+    let h = (this.lines.length / this.linesWidth);
+    if (y + h + 3 >= this.bufHeight && this.slide !== null) {
       // We're off screen so reset the animation
       if (y >= this.bufHeight) {
         this.canRender = false;
       }
       this.doAlign(secs);
-    } else if (y + this.lines.length < this.bufHeight) {
+    } else if (y + h < this.bufHeight) {
       this.canRender = true;
     }
 
@@ -195,9 +260,9 @@ class TermString extends TermElement {
     }
 
     if (this.slide !== null) {
-      this.x = this.startX
+      this.x = Math.floor(this.startX
         + smoothstep(this.creationTime + this.slide, this.creationTime + this.slide + this.slideTime, secs)
-        * (this.endX - this.startX);
+        * (this.endX - this.startX));
     }
 
     if (this.lastCursorUpdate + 0.4 < secs && this.cursor) {
@@ -206,9 +271,9 @@ class TermString extends TermElement {
       this.setLines(secs);
     }
 
-    for (let i = 0; i < this.lines.length; i++) {
-      if (y + i >= 0 && y + i < this.bufHeight) {
-        this.lineBuffer[y + i] = replaceAt(this.lineBuffer[y + i], Math.floor(this.x), this.lines[i]);
+    for (let j = Math.max(y, 0); j < Math.min(y + h, this.bufHeight); j++) {
+      for (let k = Math.max(this.x, 0); k < Math.min(this.x + this.linesWidth, this.bufWidth); k++) {
+        this.lineBuffer[j * this.bufWidth + k] = this.lines[(j - y) * this.linesWidth + (k - this.x)];
       }
     }
   }
@@ -221,7 +286,7 @@ class TermBox extends TermElement {
   h: number;
   clear: boolean;
   
-  constructor(time: number, lineBuffer: string[], bufWidth: number, bufHeight: number, charsScrolled: number,
+  constructor(time: number, lineBuffer: number[], bufWidth: number, bufHeight: number, charsScrolled: number,
     x: number, y: number, w: number, h: number, clear: string | undefined) {
     super(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
     this.x = x;
@@ -243,66 +308,53 @@ class TermBox extends TermElement {
     }
 
     if (this.clear) {
-      let str = "";
-      for (let x = 0; x < this.w; x++) {
-        str += ' ';
-      }
-      for (let y = sy; y < sy + this.h; y++) {
-        if (y >= 0 && y < this.bufHeight) {
-          this.lineBuffer[y] = replaceAt(this.lineBuffer[y], this.x, str);
+      for (let y = Math.max(sy, 0); y < Math.min(sy + this.h, this.bufHeight); y++) {
+        for (let x = Math.max(this.x, 0); x < Math.min(this.x + this.w, this.bufWidth); x++) {
+          this.lineBuffer[y * this.bufWidth + x] = ' '.charCodeAt(0);
         }
       }
     }
 
-    if (sy >= 0 && sy < this.bufHeight) {
-      this.lineBuffer[sy] = replaceAt(this.lineBuffer[sy], this.x, "+");
-      this.lineBuffer[sy] = replaceAt(this.lineBuffer[sy], this.x + this.w, "+");
-    }
-    if (sy + this.h >= 0 && sy + this.h < this.bufHeight) {
-      this.lineBuffer[sy + this.h] = replaceAt(this.lineBuffer[sy + this.h], this.x, "+");
-      this.lineBuffer[sy + this.h] = replaceAt(this.lineBuffer[sy + this.h], this.x + this.w, "+");
-    }
-    let bars = [...Array(this.w - 1).keys()].map(() => '=').join('');
-
-    for (let y = sy + 1; y < sy + this.h; y++) {
-      if (y >= 0 && y < this.bufHeight) {
-        this.lineBuffer[y] = replaceAt(this.lineBuffer[y], this.x, "|");
-        this.lineBuffer[y] = replaceAt(this.lineBuffer[y], this.x + this.w, "|");
-      }
-    }
-    for (let x = this.x + 1; x < this.x + this.w; x++) {
+    for (let x = Math.max(this.x, 0); x < Math.min(this.x + this.w, this.bufWidth); x++) {
       if (sy >= 0 && sy < this.bufHeight) {
-        this.lineBuffer[sy] = replaceAt(this.lineBuffer[sy], this.x + 1, bars);
+        this.lineBuffer[sy * this.bufWidth + x] = '='.charCodeAt(0);
       }
-      if (sy + this.h >= 0 && sy + this.h < this.bufHeight) {
-        this.lineBuffer[sy + this.h] = replaceAt(this.lineBuffer[sy + this.h], this.x + 1, bars);
+      if ((sy + this.h) >= 0 && (sy + this.h) < this.bufHeight) {
+        this.lineBuffer[(sy + this.h) * this.bufWidth + x] = '='.charCodeAt(0);
+      }
+    }
+    for (let y = Math.max(sy, 0); y < Math.min(sy + this.h + 1, this.bufHeight); y++) {
+      if (this.x >= 0 && this.x < this.bufWidth) {
+        this.lineBuffer[y * this.bufWidth + this.x] = '|'.charCodeAt(0);
+        if (y == sy || y == sy + this.h) {
+          this.lineBuffer[y * this.bufWidth + this.x] = '+'.charCodeAt(0);
+        }
+      }
+      if ((this.x + this.w) >= 0 && (this.x + this.w) < this.bufWidth) {
+        this.lineBuffer[y * this.bufWidth + this.x + this.w] = '|'.charCodeAt(0);
+        if (y == sy || y == sy + this.h) {
+          this.lineBuffer[y * this.bufWidth + this.x + this.w] = '+'.charCodeAt(0);
+        }
       }
     }
   }
 }
 
 class TermMatrix extends TermElement {
-  numbers: [number, number, number, string][];
-  numberMatrix: string[];
+  numbers: [number, number, number, number][];
+  numberMatrix: number[];
   
-  constructor(time: number, lineBuffer: string[], bufWidth: number, bufHeight: number, charsScrolled: number, amount: number, speed: number) {
+  constructor(time: number, lineBuffer: number[], bufWidth: number, bufHeight: number, charsScrolled: number, amount: number, speed: number) {
     super(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
     this.numbers = [];
-    this.numberMatrix = [];
-    for (let y = 0; y < bufHeight; y++) {
-      let str = '';
-      for (let x = 0; x < bufWidth; x++) {
-        str += ' ';
-      }
-      this.numberMatrix.push(str);
-    }
+    this.numberMatrix = [...Array(this.bufWidth * this.bufHeight)].map(() => ' '.charCodeAt(0));
     for (let x = 0; x < bufWidth; x++) {
       for (let i = 0; i < amount; i++) {
         this.numbers.push([
           x,
           Math.floor((Math.random() * bufHeight * 1.5) - (bufHeight * 0.5)),
           Math.random() * 0.5 - 0.25 + speed,
-          ['0', ' ', ' ', ' '][Math.floor(Math.random() * 4)],
+          ['0'.charCodeAt(0), ' '.charCodeAt(0), ' '.charCodeAt(0), ' '.charCodeAt(0)][Math.floor(Math.random() * 4)],
         ]);
       }
     }
@@ -313,27 +365,27 @@ class TermMatrix extends TermElement {
     this.numbers.forEach((num, idx) => {
       let oldHeight = Math.floor(num[1]);
       num[1] += dt * num[2];
-      if (Math.floor(num[1]) != oldHeight && num[3] != ' ') {
-        num[3] = ['0', '1'][Math.floor(Math.random() * 2)];
+      if (Math.floor(num[1]) != oldHeight && num[3] != ' '.charCodeAt(0)) {
+        num[3] = ['0'.charCodeAt(0), '1'.charCodeAt(0)][Math.floor(Math.random() * 2)];
       }
       if (num[1] >= this.bufHeight) {
         num[1] = Math.floor((Math.random() * this.bufHeight * 1.5) - (this.bufHeight * 0.5));
       } else {
         let y = Math.floor(num[1]);
-        if (y < this.bufHeight) {
-          this.numberMatrix[y] = replaceAt(this.numberMatrix[y], num[0], num[3]);
+        if (y >= 0 && y < this.bufHeight) {
+          this.numberMatrix[y * this.bufWidth + num[0]] = num[3];
         }
       }
     });
 
-    this.numberMatrix.forEach((line, idx) => {
-      this.lineBuffer[idx] = line;
-    });
+    for (let i = 0; i < this.numberMatrix.length; i++) {
+      this.lineBuffer[i] = this.numberMatrix[i];
+    }
   }
 }
 
 export default class Term {
-  lines: string[];
+  lines: number[];
   private mouseX: number;
   private mouseY: number;
   private charsScrolled: number;
@@ -356,9 +408,6 @@ export default class Term {
   private glTextShader: WebGLProgram;
   private glCrtShader: WebGLProgram;
 
-  private testImage: HTMLImageElement | null;
-  private testImageDoneDownloading: boolean;
-
   constructor(fontFamily: string, canvas: HTMLCanvasElement, widthChars: number, heightChars: number, termElements: object[]) {
     // Create the DOM elements and get the contexts
     console.log("Term Creation");
@@ -367,17 +416,9 @@ export default class Term {
     this.mouseY = 0;
     this.deltaTime = 0.0;
     this.charsScrolled = 0;
-    this.updateCharsScrolled();
     this.widthChars = widthChars;
     this.heightChars = heightChars;
-    this.lines = [];
-    for (let y = 0; y < this.heightChars; y++) {
-      let s = "";
-      for (let x = 0; x < this.widthChars; x++) {
-        s += ' ';
-      }
-      this.lines.push(s);
-    }
+    this.lines = [...Array(this.widthChars * this.heightChars)].map(() => ' '.charCodeAt(0));
     this.textFontFamily = fontFamily;
     this.textCanvas = document.createElement('canvas');
     this.textCanvas.style.position = "absolute";
@@ -385,29 +426,31 @@ export default class Term {
     this.glCanvas = canvas;
     this.glCanvas.appendChild(this.textCanvas);
 
-    this.testImageDoneDownloading = false;
-    // this.testImage = new Image();
-    this.testImage = null;
-    // if (this.testImage !== null) {
-    //   this.testImage.src = "/images/sonic_the_hedgehog_3_profilelarge.jpg";
-    //   this.testImage.addEventListener("load", (e) => {
-    //     this.testImageDoneDownloading = true;
-    //   });
-    // }
-
     // Create the elements in the terminal, and draw and remove the static ones
     this.elements = termElements.map((elem) => createElement(elem, this.timePassed, this.lines, this.widthChars, this.heightChars, this.charsScrolled));
 
     // Initialize the drawing contexts
     {
+      let textContext = this.textCanvas.getContext('2d');
+      if (textContext) {
+        this.textContext = textContext;
+        this.textCanvas.width = this.widthChars * CHAR_WIDTH;
+        this.textCanvas.height = this.heightChars * CHAR_HEIGHT;
+        this.textContext.font = `${CHAR_HEIGHT}px ${this.textFontFamily}`;
+        this.textContext.textBaseline = "top";
+        this.textContext.direction = "ltr";
+      } else {
+        throw "Couldn't create the 2d context!";
+      }
+
       let glContext = this.glCanvas.getContext('webgl2');
       if (glContext) {
+        this.glCanvas.width = this.glCanvas.clientWidth;
+        this.glCanvas.height = this.glCanvas.clientHeight;
         this.gl = glContext;
-        this.gl.enable(this.gl.BLEND);
-        this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
         [this.glQuadVertexArray, this.glQuadVertexBuffer] = createQuad(this.gl);
-        [this.glTextFramebuffer, this.glTextColorbuffer] = createFramebuffer(this.gl, this.glCanvas.width, this.glCanvas.height);
-        this.glRawTextTexture = createTexture(this.gl, 640, 288);
+        [this.glTextFramebuffer, this.glTextColorbuffer] = createFramebuffer(this.gl, this.textCanvas.width, this.textCanvas.height);
+        this.glRawTextTexture = createTexture(this.gl, this.textCanvas.width, this.textCanvas.height);
         let vertexSrc =
         `attribute vec2 a_position;
         attribute vec2 a_tex_coord;
@@ -422,118 +465,66 @@ export default class Term {
         uniform sampler2D tex;
         void main() {
           vec4 color = texture2D(tex, vec2(v_uv.x, 1.0 - v_uv.y));
-          if (color.a < 0.7) {
-            discard;
+          if (color.g < 0.7) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
           } else {
-            gl_FragColor = vec4(min(color.rgb, vec3(0.7)), 1.0);
+            gl_FragColor = vec4(vec3(0.1, 1.0, 0.1), 1.0);
           }
         }`);
         this.glCrtShader = createShader(this.gl, vertexSrc,
-        `precision highp float;
+        `precision lowp float;
         varying highp vec2 v_uv;
         uniform sampler2D tex;
         uniform vec2 texsize;
         uniform float timesecs;
-        #define HORIZ_BLUR_PIXELS 1.0
         
         vec4 getBlur(vec2 uv) {
-          vec4 color = vec4(0.0);
-          vec2 hoff = vec2(texsize.x, 0.0);
-          // Horizontal Pass
-          for(int i = 0; i <= int(HORIZ_BLUR_PIXELS) * 2; i++) {
-            float dist = (float(i) - HORIZ_BLUR_PIXELS);
-            color += texture2D(tex, uv + hoff * dist) * 0.2;
-          }
-          // Vertical Pass
-          vec2 voff = vec2(0.0, texsize.y);
-          color += texture2D(tex, uv + voff) * 0.25;
-          color += texture2D(tex, uv - voff) * 0.25;
+          vec4 color = texture2D(tex, vec2(uv.x - texsize.x, uv.y)) * 0.2;
+          color += texture2D(tex, uv) * 0.6;
+          color += texture2D(tex, vec2(uv.x + texsize.x, uv.y)) * 0.2;
+          
+          // Glare component
+          float yshift = uv.y - 0.85;
+          color += (yshift*yshift*yshift)+0.03;
           return color;
         }
 
         vec2 warpUv(vec2 uv) {
-          vec2 curvature = vec2(7.0);
           uv = uv * 2.0 - 1.0;
-          vec2 offset = abs(uv.yx) / vec2(curvature.x, curvature.y);
+          vec2 offset = abs(uv.yx) * 0.166;
           uv += uv * offset * offset;
           uv = uv * 0.5 + 0.5;
           return uv;
         }
 
-        vec4 scanline(vec2 uv) {
-          float maxDepth = 0.3;
-          float depth = sin(uv.y / texsize.y * 3.0) / 2.0 + 0.5;
-          return vec4(depth*depth * -maxDepth);
+        float scanline(vec2 uv) {
+          float maxDepth = 0.75 / 2.0;
+          float depth = sin(uv.y / texsize.y * 6.28)*maxDepth + (1.0 - maxDepth);
+          return depth;
         }
 
-        float rollingShutter(float y) {
-          float depth = 0.85;
-          float height = 0.1;
-          float modtime = mod(timesecs * 0.1, 1.0 + 0.07 + height + 0.3 + 1.1) - height - 0.3;
-          if (y < modtime) {
-            return (1.0 - smoothstep(modtime - 0.07, modtime, y) + depth);
-          } else {
-            return (smoothstep(modtime + height, modtime + height + 0.3, y) + depth);
-          }
+        float vignette(vec2 uv) {
+          vec2 v = smoothstep(vec2(0.0), vec2(2.5 * ${CHAR_WIDTH}.0 * texsize.x, 2.5 * ${CHAR_HEIGHT}.0 * texsize.y), 1.0 - abs(uv * 2.0 - 1.0));
+          return v.x * v.y;
         }
 
-        vec4 vignette(vec4 color, vec2 uv) {
-          color *= smoothstep(0.0, 2.0 * 8.0 * texsize.x, 1.0 - abs(uv.x * 2.0 - 1.0));
-          color *= smoothstep(0.0, 1.7 * 12.0 * texsize.y, 1.0 - abs(uv.y * 2.0 - 1.0));
-          return color;
-        }
-
-        vec2 scanlineJitterOffset(vec2 uv) {
-          return vec2(sin((uv.y / texsize.y * 3.0) + (timesecs * 1694.0)) * min(texsize.x * 0.8, 0.009125), 0.0);
-        }
-
-        vec4 glare(vec2 uv) {
-          float power = 0.25;
-          float xGlare = (-pow(1.5 * uv.x - 0.75, 8.0) + 0.05) / 0.05;
-          vec4 final = vec4(0.0);
-          if (uv.y < 0.8) {
-            final = vec4(smoothstep(0.0, 0.7, uv.y) * xGlare * power);
-          } else {
-            final = vec4(smoothstep(0.0, 0.3, 1.0 - uv.y + 0.15) * xGlare * power);
-          }
-          return final + scanline(uv);
-        }
-
-        vec4 shadowMask(vec2 uv) {
-          return vec4(
-            cos(uv.x/texsize.x*2.0-1.0)*0.25+0.75,
-            cos(uv.x/texsize.x*2.0-3.0)*0.25+0.75,
-            cos(uv.x/texsize.x*2.0-5.0)*0.25+0.75,
-            1.0);
+        vec2 jitterUv(vec2 uv) {
+          return vec2(uv.x + sin((uv.y / 0.0025) + (timesecs * 1694.0)) * 0.00065, uv.y);
         }
 
         void main() {
-          vec2 uv = warpUv(v_uv + scanlineJitterOffset(v_uv));
-          vec4 color = getBlur(uv) * 2.0 + scanline(uv);
-          color *= shadowMask(uv);
-          //color += glare(uv);
-          //color *= rollingShutter(1.0 - uv.y);
-          color = vignette(color, uv);
-          gl_FragColor = color;
+          vec2 uv = warpUv(jitterUv(v_uv));
+          gl_FragColor = getBlur(uv) * scanline(uv) * 4.0 * vignette(uv) * min(timesecs - 0.75, 1.0);
         }`);
       } else {
         throw "Couldn't create the webgl2 context!";
-      }
-
-      let textContext = this.textCanvas.getContext('2d');
-      if (textContext) {
-        this.textContext = textContext;
-        this.resizeTextCanvas();
-      } else {
-        throw "Couldn't create the 2d context!";
       }
     }
   }
 
   render(timeStamp: DOMHighResTimeStamp) {
-    this.resize();
-    this.clearLines();
-    this.updateCharsScrolled();
+    this.lines.fill(' '.charCodeAt(0), 0);
+    this.charsScrolled = Math.floor((window.scrollY / window.innerHeight) * this.heightChars);
     let newTime = timeStamp / 1000;
     this.deltaTime = newTime - this.timePassed;
     this.timePassed = newTime;
@@ -542,108 +533,55 @@ export default class Term {
   }
 
   onMouseUpdate(e: MouseEvent) {
-    this.mouseX = Math.floor((e.clientX / window.innerWidth) * this.widthChars);
-    this.mouseY = Math.floor((e.clientY / window.innerHeight) * this.heightChars);
-  }
-
-  private drawCursor() {
-    if (this.mouseX >= 0 && this.mouseX < this.widthChars &&
-        this.mouseY >= 0 && this.mouseY < this.heightChars) {
-      this.lines[this.mouseY] = replaceAt(this.lines[this.mouseY], this.mouseX, ['█', '▒'][Math.floor(this.timePassed * 3) % 2]);
-    }
-  }
-
-  private updateCharsScrolled() {
-    this.charsScrolled = Math.floor((window.scrollY / window.innerHeight) * this.heightChars);
-  }
-
-  private clearLines() {
-    let str = '';
-    for (let i = 0; i < this.widthChars; i++) {
-      str += ' ';
-    }
-    for (let y = 0; y < this.heightChars; y++) {
-      this.lines[y] = str;
-    }
-  }
-
-  private resizeTextCanvas() {
-    this.textCanvas.width = this.widthChars * 8;
-    this.textCanvas.height = this.heightChars * 12;
-    this.textContext.fillStyle = "#fff";
-    this.textContext.font = `12px ${this.textFontFamily}`;
-    this.textContext.textBaseline = "top";
-    this.textContext.direction = "ltr";
-  }
-
-  private resize() {
-    if (this.glCanvas.clientWidth != this.glCanvas.width ||
-        this.glCanvas.clientHeight != this.glCanvas.height) {
-      this.glCanvas.width = this.glCanvas.clientWidth;
-      this.glCanvas.height = this.glCanvas.clientHeight;
-      this.resizeTextCanvas();
-    }
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+    let x = e.clientX;
+    let y = e.clientY;
+    this.mouseX = Math.floor((x / width) * this.widthChars);
+    this.mouseY = Math.floor((y / height) * this.heightChars);
   }
 
   private drawText() {
-    let seed = 123412;
-    let mulberry32butchered = (a: number): number => {
-      var t = a += 0x6D2B79F5;
-      t = Math.imul(t ^ t >>> 15, t | 1);
-      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-      return ((t ^ t >>> 14) >>> 0);
-    }
-
     this.elements.forEach((elem) => {
       elem.render(this.timePassed, this.deltaTime, this.charsScrolled);
     });
-    this.drawCursor();
-
-    this.textContext.clearRect(0, 0, this.textCanvas.width, this.textCanvas.height);
-    for (let y = 0; y < this.lines.length; y++) {
-      for (let c = 0; c < this.lines[y].length; c++) {
-        seed = mulberry32butchered(seed);
-        this.textContext.fillStyle = ["#1f1", "#0f0", "#3f3", "#2f2"][seed % 4];
-        this.textContext.fillText(this.lines[y].charAt(c), c * 8, y * 12);
-      }
+    if (this.mouseX >= 0 && this.mouseX < this.widthChars &&
+      this.mouseY >= 0 && this.mouseY < this.heightChars) {
+      this.lines[this.mouseY * this.widthChars + this.mouseX] = ['█'.charCodeAt(0), '▒'.charCodeAt(0)][Math.floor(this.timePassed * 3) % 2];
     }
 
-    if (this.testImageDoneDownloading && this.testImage) {
-      this.textContext.drawImage(this.testImage, 0, 0, this.testImage.width, this.testImage.height, 0.0, 0.0, this.textCanvas.width, this.textCanvas.height);
+    this.textContext.fillStyle = "#000";
+    this.textContext.fillRect(0, 0, this.textCanvas.width, this.textCanvas.height);
+    this.textContext.fillStyle = "#1f1";
+    for (let y = 0; y < this.heightChars; y++) {
+      this.textContext.fillText(String.fromCharCode(...this.lines.slice(y * this.widthChars, (y + 1) * this.widthChars)), 0, y * CHAR_HEIGHT);
     }
   }
 
   private drawCrt() {
     // Extract the text texture
     this.gl.activeTexture(this.gl.TEXTURE0);
-    this.gl.bindTexture(this.gl.TEXTURE_2D, this.glTextColorbuffer);
-    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.textCanvas.width, this.textCanvas.height, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, null);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.glRawTextTexture);
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, this.textCanvas);
 
     // Setup the viewport and draw to the text framebuffer
     this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.glTextFramebuffer);
     this.gl.viewport(0, 0, this.textCanvas.width, this.textCanvas.height);
-    this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
 
     // Create the "pixels" for the actual crt screen
     this.gl.useProgram(this.glTextShader);
-    this.gl.uniform1i(this.gl.getUniformLocation(this.glTextShader, "tex"), 0);
     this.gl.bindVertexArray(this.glQuadVertexArray);
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
 
     // Setup the viewport and draw to the normal framebuffer
     this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
     this.gl.viewport(0, 0, this.glCanvas.width, this.glCanvas.height);
-    this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
 
     // Dummy draw to the crt screen
     this.gl.useProgram(this.glCrtShader);
-    this.gl.uniform1i(this.gl.getUniformLocation(this.glCrtShader, "tex"), 0);
     this.gl.uniform2f(this.gl.getUniformLocation(this.glCrtShader, "texsize"), 1.0 / this.textCanvas.width, 1.0 / this.textCanvas.height);
     this.gl.uniform1f(this.gl.getUniformLocation(this.glCrtShader, "timesecs"), this.timePassed);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.glTextColorbuffer);
-    this.gl.bindVertexArray(this.glQuadVertexArray);
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
   }
 

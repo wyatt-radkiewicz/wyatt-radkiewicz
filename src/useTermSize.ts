@@ -10,7 +10,7 @@ function isOnMobile(): boolean {
 }
 
 function getRealSize(landscape: boolean): Size {
-  if (isOnMobile()) {
+  if (onMobile) {
     if (landscape) {
       return {
         width: screen.height,
@@ -38,47 +38,44 @@ function getTermSize(fixedWidth: number, landscape: boolean): Size {
   };
 }
 
+export var onMobile: boolean = false;
+
 export default function useTermSize(fixedWidth: number): { width: number, height: number } {
   const [termSize, setTermSize] = useState<Size | null>(null);
-  const [orientation, setOrientation] = useState('p');
+  const orientation = useRef('p');
   const portrait = useRef(null as unknown as MediaQueryList);
-  const landscape = useRef(null as unknown as MediaQueryList);
 
   useEffect(() => {
     function handleResize() {
-      let size = getTermSize(fixedWidth, orientation === 'l');
+      onMobile = isOnMobile();
+      let size = getTermSize(fixedWidth, orientation.current === 'l');
       document.documentElement.style.setProperty('--char-height', `${window.innerHeight / size.height}px`);
       setTermSize(size);
     }
 
     if (!termSize) {
       portrait.current = window.matchMedia("(orientation: portrait)");
-      landscape.current = window.matchMedia("(orientation: landscape)");
+      handlePortrait(portrait.current);
       handleResize();
     }
 
-    function handlePortrait(e: MediaQueryListEvent) {
+    function handlePortrait(e: any) {
       if(e.matches && isOnMobile()) {
-        setOrientation('p');
+        orientation.current = 'p';
         handleResize();
-      }
-    }
-    function handleLandscape(e: MediaQueryListEvent) {
-      if(e.matches && isOnMobile()) {
-        setOrientation('l');
+      } else {
+        orientation.current = 'l';
         handleResize();
       }
     }
 
     portrait.current.addEventListener('change', handlePortrait);
-    landscape.current.addEventListener('change', handleLandscape);
     window.addEventListener('resize', handleResize);
     return () => {
       portrait.current.removeEventListener('change', handlePortrait);
-      landscape.current.addEventListener('change', handleLandscape);
       window.removeEventListener('resize', handleResize);
     };
-  }, [termSize, fixedWidth, orientation]);
+  }, [termSize, fixedWidth]);
 
   return termSize ?? {width: 80, height: 24};
 }

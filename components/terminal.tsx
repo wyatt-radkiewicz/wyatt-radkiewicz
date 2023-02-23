@@ -1,7 +1,7 @@
 import { useRef, useEffect } from 'react';
 import Term from '../src/term';
 import localFont from '@next/font/local';
-const terminalFont = localFont({ src: '../public/terminal_font.ttf' });
+const terminalFont = localFont({ src: '../public/terminal_font.woff', preload: true });
 
 export default function Terminal({ width, height, children, ...rest }: any) {
   const terminalRef = useRef<Term | null>(null);

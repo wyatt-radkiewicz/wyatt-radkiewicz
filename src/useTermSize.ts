@@ -49,7 +49,7 @@ export default function useTermSize(fixedWidth: number): { width: number, height
     function handleResize() {
       onMobile = isOnMobile();
       let size = getTermSize(fixedWidth, orientation.current === 'l');
-      document.documentElement.style.setProperty('--char-height', `${window.innerHeight / size.height}px`);
+      document.documentElement.style.setProperty('--char-height', `${getRealSize(onMobile).height / size.height}px`);
       setTermSize(size);
     }
 

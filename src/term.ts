@@ -19,27 +19,36 @@ function createElement(elemObj: any, time: number, lineBuffer: number[], bufWidt
   let elem = new TermElement(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
 
   if (elemObj["type"] === "string") {
-    let x = Number(elemObj["x"]) ?? 0;
-    let y = Number(elemObj["y"]) ?? 0;
-    let font = elemObj["font"] ?? null;
-    let align = elemObj["align"] ?? "l";
+    let x = elemObj["x"] != undefined ? Number(elemObj["x"]) : 0;
+    let y = elemObj["y"] != undefined ? Number(elemObj["y"]) : 0;
+    let font = elemObj["font"] != undefined ? elemObj["font"] : null;
+    let align = elemObj["align"] != undefined ? elemObj["align"] : "l";
     elem = new TermString(time, lineBuffer, bufWidth, bufHeight, charsScrolled,
       elemObj["value"], font, x, y, align, elemObj["cursor"], elemObj["slide"]);
   }
   if (elemObj["type"] === "box") {
-    let x = Number(elemObj["x"]) ?? 0;
-    let y = Number(elemObj["y"]) ?? 0;
-    let w = Number(elemObj["w"]) ?? 5;
-    let h = Number(elemObj["h"]) ?? 5;
+    let x = elemObj["x"] != undefined ? Number(elemObj["x"]) : 0;
+    let y = elemObj["y"] != undefined ? Number(elemObj["y"]) : 0;
+    let w = elemObj["w"] != undefined ? Number(elemObj["w"]) : 5;
+    let h = elemObj["h"] != undefined ? Number(elemObj["h"]) : 5;
     elem = new TermBox(time, lineBuffer, bufWidth, bufHeight, charsScrolled, x, y, w, h, elemObj["clear"]);
   }
   if (elemObj["type"] === "matrix") {
-    let amount = Number(elemObj["amount"]) ?? 50;
-    let speed = Number(elemObj["speed"]) ?? 5;
-    elem = new TermMatrix(time, lineBuffer, bufWidth, bufHeight, charsScrolled, amount, speed);
+    let amount = elemObj["amount"] != undefined ? Number(elemObj["amount"]) : 50;
+    let speed = elemObj["speed"] != undefined ? Number(elemObj["speed"]) : 5;
+    let starty = elemObj["starty"] != undefined ? Number(elemObj["starty"]) : 0;
+    let endy = elemObj["endy"] != undefined ? Number(elemObj["endy"]) : 10000000;
+    elem = new TermMatrix(time, lineBuffer, bufWidth, bufHeight, charsScrolled, amount, speed, starty, endy);
   }
   if (elemObj["type"] === "cube") {
-    elem = new TermCube(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
+    let starty = elemObj["starty"] != undefined ? Number(elemObj["starty"]) : 0;
+    let endy = elemObj["endy"] != undefined ? Number(elemObj["endy"]) : 10000000;
+    elem = new TermCube(time, lineBuffer, bufWidth, bufHeight, charsScrolled, starty, endy);
+  }
+  if (elemObj["type"] === "donut") {
+    let starty = elemObj["starty"] != undefined ? Number(elemObj["starty"]) : 0;
+    let endy = elemObj["endy"] != undefined ? Number(elemObj["endy"]) : 10000000;
+    elem = new TermDonut(time, lineBuffer, bufWidth, bufHeight, charsScrolled, starty, endy);
   }
 
   if (elemObj["scroll"] == "true") {
@@ -70,10 +79,22 @@ function rotatePoint(x: number, y: number, z: number, rx: number, ry: number): [
   ];
 }
 
-function getShadeChar(nx: number, ny: number, nz: number): number {
+function rotatePoint3(x: number, y: number, z: number, A: number, B: number, C: number): [number, number, number] {
+  return [
+    x*Math.cos(B)*Math.cos(C)+y*(Math.sin(A)*Math.sin(B)*Math.cos(C)+Math.cos(A)*Math.sin(C))+z*(-Math.cos(A)*Math.sin(B)*Math.cos(C)+Math.sin(A)*Math.sin(C)),
+    -x*Math.cos(B)*Math.sin(C)+y*(-Math.sin(A)+Math.sin(B)*Math.sin(C)+Math.cos(A)*Math.cos(C))+z*(Math.cos(A)*Math.sin(B)*Math.sin(C)+Math.sin(A)*Math.cos(C)),
+    x*Math.sin(B)-y*Math.sin(A)*Math.cos(B)+z*Math.cos(A)*Math.cos(B),
+  ];
+}
+
+function getShadeChar(nx: number, ny: number, nz: number, down: boolean): number {
   let sun = [0.577, -0.577, -0.577];
-  let shade = Math.floor(((nx*sun[0] + ny*sun[1] + nz*sun[2]) / 2.0 + 0.5) * 7.999);
-  return ['.', ':', '-', '=', '+', '*', '#', '@'][shade].charCodeAt(0);
+  if (down) {
+    sun = [0.0, 0.0, 1.0];
+  }
+  let dot = ((nx*sun[0] + ny*sun[1] + nz*sun[2]) / 2.0 + 0.5);
+  let shade = Math.floor(dot * dot * 4.999);
+  return ['.', '-', '=', '*', '#'][shade].charCodeAt(0);
 }
 
 class TermCube extends TermElement {
@@ -82,20 +103,43 @@ class TermCube extends TermElement {
   nearPlane: number;
   cubeDist: number;
   cubeSize: number;
+  starty: number;
+  endy: number;
+  scrollDist: number;
+  scrollDistMax: number;
   
-  constructor(time: number, lineBuffer: number[], bufWidth: number, bufHeight: number, charsScrolled: number) {
+  constructor(time: number, lineBuffer: number[], bufWidth: number, bufHeight: number, charsScrolled: number, starty: number, endy: number) {
     super(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
     this.ang = [0.0, 0.0];
     this.nearPlane = 15.0;
     this.cubeDist = 20;
     this.cubeSize = 5;
     this.zBuffer = [...Array(this.bufWidth * this.bufHeight)].map(() => 0);
+    this.starty = starty;
+    this.endy = endy;
+    this.scrollDistMax = 60;
+    this.scrollDist = this.scrollDistMax;
   }
 
   render(secs: number, dt: number, charsScrolled: number) {
+    if (charsScrolled < this.starty || charsScrolled > this.endy) {
+      if (this.scrollDist >= this.scrollDistMax) {
+        this.scrollDist = this.scrollDistMax;
+        return;
+      } else {
+        this.scrollDist += this.scrollDistMax * dt * 2.0;
+      }
+    } else {
+      if (this.scrollDist > 0) {
+        this.scrollDist -= this.scrollDistMax * dt * 2.0;
+      }
+      if (this.scrollDist <= 0) {
+        this.scrollDist = 0;
+      }
+    }
     this.ang[0] += dt * 1.1;
     this.ang[1] -= dt * 1.1;
-    this.cubeDist = Math.sin(secs) * 5.0 + 16.0;
+    this.cubeDist = Math.sin(secs) * 3.0 + 16.0 + this.scrollDist;
     this.zBuffer.fill(1000000000.0, 0);
     this.drawFace(0);
     this.drawFace(1);
@@ -115,8 +159,8 @@ class TermCube extends TermElement {
       [1, 0, 0],
     ];
     let np = rotatePoint(points[faceId][0], points[faceId][1], points[faceId][2], this.ang[0], this.ang[1]);
-    for (let ix = -this.cubeSize + 0.1; ix <= this.cubeSize - 0.1; ix += 0.3) {
-      for (let iy = -this.cubeSize + 0.1; iy <= this.cubeSize - 0.1; iy += 0.3) {
+    for (let ix = -this.cubeSize + 0.05; ix <= this.cubeSize - 0.05; ix += 0.4) {
+      for (let iy = -this.cubeSize + 0.05; iy <= this.cubeSize - 0.05; iy += 0.4) {
         let rps = [
           [ix, iy, -this.cubeSize],
           [ix, iy, this.cubeSize],
@@ -130,7 +174,74 @@ class TermCube extends TermElement {
         let x = Math.floor((this.bufWidth / 2) + (rp[0] * this.nearPlane) / z);
         let y = Math.floor((this.bufHeight / 2) + (rp[1] * this.nearPlane) / z);
         if (x >= 0 && x < this.bufWidth && y >= 0 && this.bufHeight && z > 0.0 && z < this.zBuffer[y * this.bufWidth + x]) {
-          this.lineBuffer[y * this.bufWidth + x] = getShadeChar(np[0], np[1], np[2]);
+          this.lineBuffer[y * this.bufWidth + x] = getShadeChar(np[0], np[1], np[2], false);
+          this.zBuffer[y * this.bufWidth + x] = z;
+        }
+      }
+    }
+  }
+}
+
+class TermDonut extends TermElement {
+  zBuffer: number[];
+  ang: [number, number];
+  nearPlane: number;
+  donutDist: number;
+  donutThickness: number;
+  donutRadius: number;
+  starty: number;
+  endy: number;
+  scrollDist: number;
+  scrollDistMax: number;
+  
+  constructor(time: number, lineBuffer: number[], bufWidth: number, bufHeight: number, charsScrolled: number, starty: number, endy: number) {
+    super(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
+    this.ang = [0.0, 0.0];
+    this.nearPlane = 15.0;
+    this.donutDist = 25;
+    this.donutRadius = 8;
+    this.donutThickness = 2.5;
+    this.zBuffer = [...Array(this.bufWidth * this.bufHeight)].map(() => 0);
+    this.starty = starty;
+    this.endy = endy;
+    this.scrollDistMax = 60;
+    this.scrollDist = this.scrollDistMax;
+  }
+
+  render(secs: number, dt: number, charsScrolled: number) {
+    if (charsScrolled < this.starty || charsScrolled > this.endy) {
+      if (this.scrollDist >= this.scrollDistMax) {
+        this.scrollDist = this.scrollDistMax;
+        return;
+      } else {
+        this.scrollDist += this.scrollDistMax * dt * 2.0;
+      }
+    } else {
+      if (this.scrollDist > 0) {
+        this.scrollDist -= this.scrollDistMax * dt * 2.0;
+      }
+      if (this.scrollDist <= 0) {
+        this.scrollDist = 0;
+      }
+    }
+    this.ang[0] += dt * 1.1;
+    this.ang[1] -= dt * 1.1;
+    this.donutDist = Math.sin(secs) * 3.0 + 20.0 + this.scrollDist;
+    this.zBuffer.fill(1000000000.0, 0);
+    
+    for (let A = 0; A < 6.28; A += 0.07) {
+      for (let B = 0; B < 6.28; B += 0.2) {
+        let base = [Math.cos(B), 0.0, Math.sin(B)];
+        let pt = [this.donutRadius-Math.cos(B)*this.donutThickness, 0.0, Math.sin(B)*this.donutThickness];
+        let base2 = rotatePoint3(base[0], base[1], base[2], 0.0, 0.0, A);
+        let base3 = rotatePoint(base2[0], base2[1], base2[2], this.ang[0], this.ang[1]);
+        let dp = rotatePoint3(pt[0], pt[1], pt[2], 0.0, 0.0, A);
+        let rp = rotatePoint(dp[0], dp[1], dp[2], this.ang[0], this.ang[1]);
+        let z = rp[2] + this.donutDist;
+        let x = Math.floor((this.bufWidth / 2) + (rp[0] * this.nearPlane) / z);
+        let y = Math.floor((this.bufHeight / 2) + (rp[1] * this.nearPlane) / z);
+        if (x >= 0 && x < this.bufWidth && y >= 0 && this.bufHeight && z > 0.0 && z < this.zBuffer[y * this.bufWidth + x]) {
+          this.lineBuffer[y * this.bufWidth + x] = getShadeChar(base3[0], base3[1], base3[2], true);
           this.zBuffer[y * this.bufWidth + x] = z;
         }
       }
@@ -343,16 +454,27 @@ class TermBox extends TermElement {
 class TermMatrix extends TermElement {
   numbers: [number, number, number, number][];
   numberMatrix: number[];
+  bottom: number[];
+  top: number[];
+  starty: number;
+  endy: number;
   
-  constructor(time: number, lineBuffer: number[], bufWidth: number, bufHeight: number, charsScrolled: number, amount: number, speed: number) {
+  constructor(time: number, lineBuffer: number[], bufWidth: number, bufHeight: number,
+    charsScrolled: number, amount: number, speed: number, starty: number, endy: number) {
     super(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
+    this.starty = starty;
+    this.endy = endy;
     this.numbers = [];
-    this.numberMatrix = [...Array(this.bufWidth * this.bufHeight)].map(() => ' '.charCodeAt(0));
+    this.bottom = [];
+    this.top = [];
+    this.numberMatrix = [...Array(this.bufWidth * (this.bufHeight * 2))].map(() => ' '.charCodeAt(0));
     for (let x = 0; x < bufWidth; x++) {
+      this.bottom.push(this.bufHeight * 1.4 + Math.random() * this.bufHeight * 0.5);
+      this.top.push(Math.random() * this.bufHeight * 0.5);
       for (let i = 0; i < amount; i++) {
         this.numbers.push([
           x,
-          Math.floor((Math.random() * bufHeight * 1.5) - (bufHeight * 0.5)),
+          Math.floor(Math.random() * bufHeight + this.top[i]),
           Math.random() * 0.5 - 0.25 + speed,
           ['0'.charCodeAt(0), ' '.charCodeAt(0), ' '.charCodeAt(0), ' '.charCodeAt(0)][Math.floor(Math.random() * 4)],
         ]);
@@ -362,24 +484,39 @@ class TermMatrix extends TermElement {
   }
 
   render(secs: number, dt: number, charsScrolled: number) {
+    let starty = Math.floor(this.bufHeight / -2.0);
+    const transSize = 20;
+    if (charsScrolled < this.starty - transSize || charsScrolled > this.endy + transSize) {
+      return;
+    } else if (charsScrolled < this.starty) {
+      starty = Math.floor((this.bufHeight / -2.0) - ((this.starty - charsScrolled) / transSize) * (this.bufHeight * 1.5));
+    } else if (charsScrolled > this.endy) {
+      starty = Math.floor((this.bufHeight / -2.0) + ((charsScrolled - this.endy) / transSize) * (this.bufHeight * 1.5));
+    }
+
     this.numbers.forEach((num, idx) => {
       let oldHeight = Math.floor(num[1]);
       num[1] += dt * num[2];
       if (Math.floor(num[1]) != oldHeight && num[3] != ' '.charCodeAt(0)) {
         num[3] = ['0'.charCodeAt(0), '1'.charCodeAt(0)][Math.floor(Math.random() * 2)];
       }
-      if (num[1] >= this.bufHeight) {
-        num[1] = Math.floor((Math.random() * this.bufHeight * 1.5) - (this.bufHeight * 0.5));
+      if (num[1] >= this.bottom[num[0]]) {
+        num[1] = this.top[num[0]];
       } else {
         let y = Math.floor(num[1]);
-        if (y >= 0 && y < this.bufHeight) {
+        if (y >= 0 && y < this.bufHeight * 2) {
           this.numberMatrix[y * this.bufWidth + num[0]] = num[3];
         }
       }
     });
 
-    for (let i = 0; i < this.numberMatrix.length; i++) {
-      this.lineBuffer[i] = this.numberMatrix[i];
+    for (let y = 0; y < this.bufHeight * 2; y++) {
+      for (let x = 0; x < this.bufWidth; x++) {
+        let num = this.numberMatrix[y * this.bufWidth + x];
+        if (y + starty > 0 && y + starty < this.bufHeight && num != ' '.charCodeAt(0)) {
+          this.lineBuffer[(y + starty) * this.bufWidth + x] = this.numberMatrix[y * this.bufWidth + x];
+        }
+      }
     }
   }
 }

@@ -1,0 +1,40 @@
+.boxPos1 {
+  top: calc(100vh + var(--char-height) * 15);
+}
+.boxPos2 {
+  top: calc(200vh + var(--char-height) * 15 * 2);
+}
+.boxPos3 {
+  top: calc(300vh + var(--char-height) * 15 * 3);
+}
+.boxPos4 {
+  top: calc(400vh + var(--char-height) * 15 * 4);
+}
+.boxPos5 {
+  top: calc(500vh + var(--char-height) * 15 * 5);
+}
+.boxPos6 {
+  top: calc(600vh + var(--char-height) * 15 * 6);
+}
+
+.sectionBox {
+  position: absolute;
+  z-index: 2;
+  background-image: linear-gradient(to bottom, rgba(207, 207, 207, 0.2), rgba(155, 155, 155, 0.1));
+  color: rgb(224, 229, 230);
+  text-shadow: 0px 1px 5px rgb(255, 255, 255);
+  backdrop-filter: blur(calc(var(--char-height) / 2.75));
+  width: 80vw;
+  left: 10vw;
+  border-radius: 0.33rem;
+  height: 100vh;
+  cursor: default;
+}
+
+.sectionBoxContainer {
+  padding: 2rem;
+  display: flex;
+  height: calc(100% - 4rem);
+  flex-direction: column;
+  align-items: center;
+}

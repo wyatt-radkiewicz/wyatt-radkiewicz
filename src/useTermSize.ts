@@ -9,9 +9,9 @@ function isOnMobile(): boolean {
   return /Android|iPhone|webOS|iPad|iPod|Blackberry|Windows Phone/i.test(navigator.userAgent);
 }
 
-function getRealSize(landscape: boolean): Size {
+export function getRealSize(): Size {
   if (onMobile) {
-    if (landscape) {
+    if (isLandscape) {
       return {
         width: screen.height,
         height: screen.width,
@@ -30,8 +30,34 @@ function getRealSize(landscape: boolean): Size {
   }
 }
 
-function getTermSize(fixedWidth: number, landscape: boolean): Size {
-  let size = getRealSize(landscape);
+export function getRealSizeForScroll(): Size {
+  if (onMobile) {
+    if (canSetMobileMaxInteriorHeight) {
+      mobileMaxInteriorHeight = Math.max(mobileMaxInteriorHeight, window.innerHeight);
+    }
+
+    if (isLandscape) {
+      return {
+        width: screen.height,
+        height: mobileMaxInteriorHeight,
+      };
+    } else {
+      
+      return {
+        width: screen.width,
+        height: mobileMaxInteriorHeight,
+      };
+    }
+  } else {
+    return {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    };
+  }
+}
+
+function getTermSize(fixedWidth: number): Size {
+  let size = getRealSize();
   return {
     width: fixedWidth,
     height: Math.round((fixedWidth * size.height) / size.width),
@@ -39,6 +65,9 @@ function getTermSize(fixedWidth: number, landscape: boolean): Size {
 }
 
 export var onMobile: boolean = false;
+export var isLandscape: boolean = true;
+var mobileMaxInteriorHeight: number = 0;
+var canSetMobileMaxInteriorHeight: boolean = true;
 
 export default function useTermSize(fixedWidth: number): { width: number, height: number } {
   const [termSize, setTermSize] = useState<Size | null>(null);
@@ -48,8 +77,8 @@ export default function useTermSize(fixedWidth: number): { width: number, height
   useEffect(() => {
     function handleResize() {
       onMobile = isOnMobile();
-      let size = getTermSize(fixedWidth, orientation.current === 'l');
-      document.documentElement.style.setProperty('--char-height', `${getRealSize(onMobile).height / size.height}px`);
+      let size = getTermSize(fixedWidth);
+      document.documentElement.style.setProperty('--char-height', `${getRealSize().height / size.height}px`);
       setTermSize(size);
     }
 
@@ -60,11 +89,19 @@ export default function useTermSize(fixedWidth: number): { width: number, height
     }
 
     function handlePortrait(e: any) {
-      if(e.matches && isOnMobile()) {
+      mobileMaxInteriorHeight = window.innerHeight;
+      canSetMobileMaxInteriorHeight = false;
+      setTimeout(() => {
+        mobileMaxInteriorHeight = window.innerHeight;
+        canSetMobileMaxInteriorHeight = true;
+      }, 500);
+      if(e.matches) {
         orientation.current = 'p';
+        isLandscape = false;
         handleResize();
       } else {
         orientation.current = 'l';
+        isLandscape = true;
         handleResize();
       }
     }

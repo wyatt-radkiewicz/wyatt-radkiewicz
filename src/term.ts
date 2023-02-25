@@ -1,5 +1,5 @@
 import figlet, { Fonts } from 'figlet';
-import { onMobile } from 'src/useTermSize';
+import { onMobile, getRealSizeForScroll } from 'src/useTermSize';
 
 const CHAR_WIDTH = 8;
 const CHAR_HEIGHT = 8;
@@ -90,7 +90,7 @@ function rotatePoint3(x: number, y: number, z: number, A: number, B: number, C: 
 function getShadeChar(nx: number, ny: number, nz: number, down: boolean): number {
   let sun = [0.577, -0.577, -0.577];
   if (down) {
-    sun = [0.0, 0.0, 1.0];
+    sun = [0.0, -1.0, 0.0];
   }
   let dot = ((nx*sun[0] + ny*sun[1] + nz*sun[2]) / 2.0 + 0.5);
   let shade = Math.floor(dot * dot * 4.999);
@@ -184,6 +184,8 @@ class TermCube extends TermElement {
 
 class TermDonut extends TermElement {
   zBuffer: number[];
+  buffers: number[][];
+  currBuffer: number;
   ang: [number, number];
   nearPlane: number;
   donutDist: number;
@@ -193,6 +195,8 @@ class TermDonut extends TermElement {
   endy: number;
   scrollDist: number;
   scrollDistMax: number;
+  drawIndex: number;
+  lastUpdate: number;
   
   constructor(time: number, lineBuffer: number[], bufWidth: number, bufHeight: number, charsScrolled: number, starty: number, endy: number) {
     super(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
@@ -202,36 +206,59 @@ class TermDonut extends TermElement {
     this.donutRadius = 8;
     this.donutThickness = 2.5;
     this.zBuffer = [...Array(this.bufWidth * this.bufHeight)].map(() => 0);
+    this.buffers = [];
+    for (let i = 0; i < 2; i++) {
+      this.buffers.push([...Array(this.bufWidth * this.bufHeight)].map(() => ' '.charCodeAt(0)));
+    }
+    this.currBuffer = 0;
+    this.drawIndex = 0;
     this.starty = starty;
     this.endy = endy;
-    this.scrollDistMax = 60;
+    this.scrollDistMax = 90;
     this.scrollDist = this.scrollDistMax;
+    this.lastUpdate = time;
   }
 
   render(secs: number, dt: number, charsScrolled: number) {
+    let indexes = onMobile ? 3 : 2;
+    this.drawIndex += 1;
     if (charsScrolled < this.starty || charsScrolled > this.endy) {
       if (this.scrollDist >= this.scrollDistMax) {
+        this.lastUpdate = secs;
         this.scrollDist = this.scrollDistMax;
         return;
-      } else {
-        this.scrollDist += this.scrollDistMax * dt * 2.0;
-      }
-    } else {
-      if (this.scrollDist > 0) {
-        this.scrollDist -= this.scrollDistMax * dt * 2.0;
-      }
-      if (this.scrollDist <= 0) {
-        this.scrollDist = 0;
       }
     }
-    this.ang[0] += dt * 1.1;
-    this.ang[1] -= dt * 1.1;
-    this.donutDist = Math.sin(secs) * 3.0 + 20.0 + this.scrollDist;
-    this.zBuffer.fill(1000000000.0, 0);
+    if (this.drawIndex >= indexes) {
+      let realDt = secs - this.lastUpdate;
+      this.lastUpdate = secs;
+      this.drawIndex = 0;
+      if (charsScrolled < this.starty || charsScrolled > this.endy) {
+        if (this.scrollDist >= this.scrollDistMax) {
+          this.scrollDist = this.scrollDistMax;
+          return;
+        } else {
+          this.scrollDist += this.scrollDistMax * realDt * 2.0;
+        }
+      } else {
+        if (this.scrollDist > 0) {
+          this.scrollDist -= this.scrollDistMax * realDt * 2.0;
+        }
+        if (this.scrollDist <= 0) {
+          this.scrollDist = 0;
+        }
+      }
+      this.ang[0] += realDt * 1.0;
+      this.ang[1] -= realDt * 1.0;
+      this.donutDist = Math.sin(secs) * 3.0 + 20.0 + this.scrollDist;
+      this.currBuffer = (this.currBuffer + 1) % this.buffers.length;
+      this.zBuffer.fill(1000000000.0, 0);
+      this.buffers[this.currBuffer].fill(' '.charCodeAt(0), 0);
+    }
     
-    for (let A = 0; A < 6.28; A += 0.07) {
-      for (let B = 0; B < 6.28; B += 0.2) {
-        let base = [Math.cos(B), 0.0, Math.sin(B)];
+    for (let A = this.drawIndex * (6.28 / indexes); A < (this.drawIndex + 1) * (6.28 / indexes); A += 0.07) {
+      for (let B = 0.0; B < 6.28; B += 0.2) {
+        let base = [this.donutRadius, 0.0, 0.0];
         let pt = [this.donutRadius-Math.cos(B)*this.donutThickness, 0.0, Math.sin(B)*this.donutThickness];
         let base2 = rotatePoint3(base[0], base[1], base[2], 0.0, 0.0, A);
         let base3 = rotatePoint(base2[0], base2[1], base2[2], this.ang[0], this.ang[1]);
@@ -241,9 +268,19 @@ class TermDonut extends TermElement {
         let x = Math.floor((this.bufWidth / 2) + (rp[0] * this.nearPlane) / z);
         let y = Math.floor((this.bufHeight / 2) + (rp[1] * this.nearPlane) / z);
         if (x >= 0 && x < this.bufWidth && y >= 0 && this.bufHeight && z > 0.0 && z < this.zBuffer[y * this.bufWidth + x]) {
-          this.lineBuffer[y * this.bufWidth + x] = getShadeChar(base3[0], base3[1], base3[2], true);
+          let np = [rp[0] - base3[0], rp[1] - base3[1], z - (base3[2] + this.donutDist)];
+          let npLen = Math.sqrt(np[0]*np[0]+np[1]*np[1]+np[2]*np[2]);
+          np[0] /= npLen; np[1] /= npLen; np[2] /= npLen;
+          this.buffers[this.currBuffer][y * this.bufWidth + x] = getShadeChar(np[0], np[1], np[2], true);
           this.zBuffer[y * this.bufWidth + x] = z;
         }
+      }
+    }
+
+    let drawBuffer = this.currBuffer - 1 < 0 ? this.buffers.length - 1 : this.currBuffer - 1;
+    for (let y = 0; y < this.bufHeight * 2; y++) {
+      for (let x = 0; x < this.bufWidth; x++) {
+        this.lineBuffer[y * this.bufWidth + x] = this.buffers[drawBuffer][y * this.bufWidth + x];
       }
     }
   }
@@ -274,7 +311,7 @@ class TermString extends TermElement {
     super(time, lineBuffer, bufWidth, bufHeight, charsScrolled);
     this.x = x;
     this.originalX = x;
-    this.y = y;
+    this.y = Math.floor(y);
     this.creationTime = time;
     this.lines = [];
     this.linesWidth = 0;
@@ -341,9 +378,9 @@ class TermString extends TermElement {
       this.startX = -this.linesWidth;
     }
     if (!this.canRender) {
-      this.x = this.startX;
+      this.x = Math.floor(this.startX);
       if (this.slide === null) {
-        this.x = this.endX;
+        this.x = Math.floor(this.endX);
       }
       this.creationTime = secs;
     }
@@ -525,6 +562,9 @@ export default class Term {
   lines: number[];
   private mouseX: number;
   private mouseY: number;
+  private mouseClientX: number;
+  private mouseClientY: number;
+  private showCursor: boolean;
   private charsScrolled: number;
   private elements: TermElement[];
   private timePassed: number;
@@ -551,6 +591,9 @@ export default class Term {
     this.timePassed = window.performance.now() / 1000;
     this.mouseX = 0;
     this.mouseY = 0;
+    this.mouseClientX = 0;
+    this.mouseClientY = 0;
+    this.showCursor = true;
     this.deltaTime = 0.0;
     this.charsScrolled = 0;
     this.widthChars = widthChars;
@@ -661,10 +704,14 @@ export default class Term {
 
   render(timeStamp: DOMHighResTimeStamp) {
     this.lines.fill(' '.charCodeAt(0), 0);
-    this.charsScrolled = Math.floor((window.scrollY / window.innerHeight) * this.heightChars);
+    this.charsScrolled = Math.floor((window.scrollY / getRealSizeForScroll().height) * this.heightChars);
     let newTime = timeStamp / 1000;
     this.deltaTime = newTime - this.timePassed;
     this.timePassed = newTime;
+    if (!onMobile) {
+      let elem = document.elementFromPoint(this.mouseClientX, this.mouseClientY);
+      this.showCursor = elem ? elem.className.includes("scrollSpace") : true;
+    }
     this.drawText();
     this.drawCrt();
   }
@@ -672,10 +719,10 @@ export default class Term {
   onMouseUpdate(e: MouseEvent) {
     let width = window.innerWidth;
     let height = window.innerHeight;
-    let x = e.clientX;
-    let y = e.clientY;
-    this.mouseX = Math.floor((x / width) * this.widthChars);
-    this.mouseY = Math.floor((y / height) * this.heightChars);
+    this.mouseClientX = e.clientX;
+    this.mouseClientY = e.clientY;
+    this.mouseX = Math.floor((this.mouseClientX / width) * this.widthChars);
+    this.mouseY = Math.floor((this.mouseClientY / height) * this.heightChars);
   }
 
   private drawText() {
@@ -683,7 +730,7 @@ export default class Term {
       elem.render(this.timePassed, this.deltaTime, this.charsScrolled);
     });
     if (this.mouseX >= 0 && this.mouseX < this.widthChars &&
-      this.mouseY >= 0 && this.mouseY < this.heightChars) {
+      this.mouseY >= 0 && this.mouseY < this.heightChars && this.showCursor) {
       this.lines[this.mouseY * this.widthChars + this.mouseX] = ['█'.charCodeAt(0), '▒'.charCodeAt(0)][Math.floor(this.timePassed * 3) % 2];
     }
 

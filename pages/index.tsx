@@ -27,7 +27,7 @@ export default function Home() {
       <div className={styles.scrollSpace}>
         <Section boxId="1">
           <h2 className={`${ubuntu_mono.className}`}>Hello!</h2>
-          <p className={`${ubuntu_mono.className} ${styles.sectionBody}`}>I am 18 years old and a senior at Timberlake High School. I've been programming since I was in 4th grade and have ammased a wealth of knowledge and practical skills in coding. I am fluent in C, C++, Rust, Javascript, Typescript, X86 Assembly (Intel), and decent at many other languages. I'm currently learning and quickly picking up on web technologies like React, NextJS, and others. Outside of coding, I am a student of ApogeeStrong led by Matt Beaudreau and Tim Kennedy and have also gotten Eagle Rank in Boy Scouts. My hobbies are coding and bodybuilding.</p>
+          <p className={`${ubuntu_mono.className} ${styles.sectionBody}`}>I am 18 years old and a senior at Timberlake High School. I&apos;ve been programming since I was in 4th grade and have ammased a wealth of knowledge and practical skills in coding. I am fluent in C, C++, Rust, Javascript, Typescript, X86 Assembly (Intel), and decent at many other languages. I&apos;m currently learning and quickly picking up on web technologies like React, NextJS, and others. Outside of coding, I am a student of ApogeeStrong led by Matt Beaudreau and Tim Kennedy and have also gotten Eagle Rank in Boy Scouts. My hobbies are coding and bodybuilding.</p>
           <Techs></Techs>
           <div className={styles.contactInfo}>
             <h4 className={ubuntu_mono.className}>wyattwradkiewicz@gmail.com</h4>
@@ -47,7 +47,7 @@ export default function Home() {
         <Section boxId="2">
           <ProjectCarosel>
             <Project imgSrc="/images/projects/cnm1.jpg">
-              <h2 className={ubuntu_mono.className}>One of my games: 'CNM ONLINE'</h2>
+              <h2 className={ubuntu_mono.className}>One of my games: &apos;CNM ONLINE&apos;</h2>
               <p className={ubuntu_mono.className}>It has online multiplayer. This is one of the levels.</p>
               <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <a className={`${ubuntu_mono.className} ${styles.link}`} href="https://github.com/wyatt-radkiewicz/cnm-online">{`<Source Code />`}</a>
@@ -55,8 +55,8 @@ export default function Home() {
               </div>
             </Project>
             <Project imgSrc="/images/projects/cnm2.jpg">
-              <h2 className={ubuntu_mono.className}>The 'ancient' level of the game.</h2>
-              <p className={ubuntu_mono.className}>The game has it's own renderer with transparency functionality written in x86 Assembly and with SIMD instructions. It has its own lua scripting system also, and a very efficient netcode.</p>
+              <h2 className={ubuntu_mono.className}>The &apos;ancient&apos; level of the game.</h2>
+              <p className={ubuntu_mono.className}>The game has it&apos;s own renderer with transparency functionality written in x86 Assembly and with SIMD instructions. It has its own lua scripting system also, and a very efficient netcode.</p>
             </Project>
             <Project imgSrc="/images/projects/editor.jpg">
               <h2 className={ubuntu_mono.className}>A new level made with the level editor!</h2>
@@ -79,7 +79,7 @@ export default function Home() {
           <ProjectCarosel>
             <Project imgSrc="/images/projects/smwo1.jpg">
               <h2 className={ubuntu_mono.className}>Super Mario War: Online</h2>
-              <p className={ubuntu_mono.className}>This was the first time I coded in Javascript and made a website. I made a lan-multiplayer game where you have to stomp on each other's heads like goombas. (Its based off of the fan game of the same name)</p>
+              <p className={ubuntu_mono.className}>This was the first time I coded in Javascript and made a website. I made a lan-multiplayer game where you have to stomp on each other&apos;s heads like goombas. (Its based off of the fan game of the same name)</p>
               <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <a className={`${ubuntu_mono.className} ${styles.link}`} href="https://github.com/wyatt-radkiewicz/smwo">{`<Source Code />`}</a>
                 <a className={`${ubuntu_mono.className} ${styles.link}`} href="https://smwo-3b393.web.app/">Play it here!</a>
@@ -106,7 +106,7 @@ export default function Home() {
             </Project>
             <Project imgSrc="/images/projects/ffo.jpg">
               <h2 className={ubuntu_mono.className}>Food Fight Online</h2>
-              <p className={ubuntu_mono.className}>This was my first test of making a multiplayer game. Its called 'Food Fight Online' and was written in C++ with SFML.</p>
+              <p className={ubuntu_mono.className}>This was my first test of making a multiplayer game. Its called &apos;Food Fight Online&apos; and was written in C++ with SFML.</p>
               <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                 <a className={`${ubuntu_mono.className} ${styles.link}`} href="https://github.com/wyatt-radkiewicz/food-fight-online">{`<Source Code />`}</a>
               </div>

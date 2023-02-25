@@ -55,6 +55,7 @@ export function ProjectCarosel({children, ...props}: any) {
           }
 
           return<motion.div
+            key={"Panel" + idx}
             initial={{ opacity: 0 }}
             animate={anim}
             transition={{ duration: !startAnim && currentChild[0] == idx ? 0.0 : 0.5 }}

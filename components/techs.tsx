@@ -16,11 +16,11 @@ function Tech({src, alt, ...props}: any) {
 }
 
 export default function Techs() {
+  //whileHover={{ scale: 1.05, borderRadius: "8rem" }}
+  //transition={{ duration: 0.8, type: "spring" }}
   return (
     <motion.div
       initial={{ borderRadius: "1rem" }}
-      //whileHover={{ scale: 1.05, borderRadius: "8rem" }}
-      //transition={{ duration: 0.8, type: "spring" }}
       className={styles.container}>
       <Tech src="/images/techs/c.png" alt="C"></Tech>
       <Tech src="/images/techs/c++.png" alt="C++"></Tech>

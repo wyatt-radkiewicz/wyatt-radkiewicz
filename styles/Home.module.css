@@ -49,6 +49,11 @@
   transform: scale(1.1) rotate(5deg) translate(5px, 2px);
 }
 
+.blogPortal {
+    border-radius: 5px;
+    box-shadow: 0 0 3px rgb(0, 218, 94, 0.5);
+}
+
 .contactInfo {
   left: 2rem;
   bottom: 2rem;

@@ -78,7 +78,7 @@ export default function Home() {
             </Project>
             <Project imgSrc="/images/projects/cnm5.jpg">
               <h2 className={ubuntu_mono.className}>The game is written from the ground up in C.</h2>
-              <p className={ubuntu_mono.className}>I learned A lot about the C language through the development of this game and learned a lot about how to look for memory leaks, which are still the bane of the codebase to this day.</p>
+              <p className={ubuntu_mono.className}>I learned A lot about the C language through the development of this game and learned a lot about how to look for memory leaks. The codebase uses its own custom memory allocators like arenas, stacks, and pools. It never uses traditional heap allocators and because of this, tracking the lifetime of memory in the program is really easy now and can be debugged much more efficiently due to this system and essentially makes memory leaks impossible.</p>
             </Project>
           </ProjectCarosel>
         </Section>
